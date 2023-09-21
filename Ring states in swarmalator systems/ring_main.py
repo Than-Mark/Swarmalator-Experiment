@@ -233,11 +233,11 @@ class RingStatesSwarmalators(Swarmalators2D):
         return 1 / self.distance_x(self.deltaX) ** 2
     
 
-def run_and_save(model: Swarmalators2D, step: int = 5):
+def run_and_save(model: Swarmalators2D, step: int = 5, T=1000):
     positions = []
     phases = []
 
-    for i in range(1000):
+    for i in range(T):
         model.update()
         if i % step == 0:
             positions.append(model.positionX.copy())
