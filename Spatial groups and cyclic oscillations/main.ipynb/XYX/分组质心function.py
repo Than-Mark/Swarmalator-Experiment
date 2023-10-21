@@ -94,13 +94,13 @@ def runge_kutta(w,theta,t,x,y):
         k3 = KM(w, theta + k2 * 0.5 * dt,c1,c2)
         k4 = KM(w, theta + k3 * dt,c1,c2)
         theta = theta + (dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
-        L1 = []
-        L2 = []
         for i in range(len(theta)):
             if theta[i]>np.pi:
                 theta[i]=theta[i]-2*np.pi
             elif theta[i]<-np.pi:
                 theta[i]=theta[i]+2*np.pi
+        L1 =[]
+        L2 =[]
         for i in range(len(k1)):
             if k1[i]>=0:
                 K1 = list(k1)
@@ -133,7 +133,6 @@ def runge_kutta_K_exp(w,theta,t,x,y):
         c1,c2 = K_exp(K,theta)
         print(i)
         # K = strength(x,y)
-
         k1 = KM(w, theta, c1, c2)
         k2 = KM(w, theta + k1 * 0.5 * dt,c1,c2)
         k3 = KM(w, theta + k2 * 0.5 * dt,c1,c2)
@@ -144,7 +143,6 @@ def runge_kutta_K_exp(w,theta,t,x,y):
                 theta[i]=theta[i]-2*np.pi
             elif theta[i]<-np.pi:
                 theta[i]=theta[i]+2*np.pi
-
         r =((np.sum(np.sin(theta))/N)**2+(np.sum(np.cos(theta))/N)**2)**0.5
         R.append(r)
     return R,x,y,theta

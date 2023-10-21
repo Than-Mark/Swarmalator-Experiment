@@ -20,8 +20,8 @@ def KM(omega,theta,c1,c2):
 def Vicsek(theta,x,y,v):
     x = x + v * np.cos(theta)
     y = y + v * np.sin(theta)
-    x = np.mod(x,10)
-    y = np.mod(y,10)
+    x = np.mod(x, 10)
+    y = np.mod(y, 10)
     return x,y
 
 @nb.jit(nopython=True)
