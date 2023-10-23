@@ -3,6 +3,7 @@ import matplotlib.animation as ma
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
 from itertools import product
+import pandas as pd
 import numpy as np
 import numba as nb
 import imageio
@@ -180,7 +181,8 @@ class Swarmalators2D():
 
 class SpatialGroups(Swarmalators2D):
     def __init__(self, strengthLambda: float, distanceD0: float, 
-                 agentsNum: int=1000, dt: float=0.01, tqdm: bool = False) -> None:
+                 agentsNum: int=1000, dt: float=0.01, tqdm: bool = False, 
+                 savePath: str = None, shotsnaps: int = 5) -> None:
         np.random.seed(randomSeed)
         self.positionX = np.random.random((agentsNum, 2)) * 10
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
@@ -194,16 +196,20 @@ class SpatialGroups(Swarmalators2D):
         ])
         self.strengthLambda = strengthLambda
         self.tqdm = tqdm
+        self.savePath = savePath
+        self.temp = np.zeros(agentsNum)
+        self.shotsnaps = shotsnaps
+        if savePath is None:
+            self.store = None
+        else:
+            if os.path.exists(f"{self.savePath}/{self}.h5"):
+                os.remove(f"{self.savePath}/{self}.h5")
+            self.store = pd.HDFStore(f"{self.savePath}/{self}.h5")
+        self.append()
 
     @property
     def K(self):
-        return self._K(self.distance_x(self.deltaX), self.distanceD0).astype(float)
-    # (self.distance_x(self.deltaX) <= self.distanceD0).astype(float)
-
-    @staticmethod
-    @nb.njit
-    def _K(distanceX, distanceD0):
-        return (distanceX <= distanceD0)
+        return (self.distance_x(self.deltaX) <= self.distanceD0).astype(float)
 
     @staticmethod
     @nb.njit
@@ -235,12 +241,20 @@ class SpatialGroups(Swarmalators2D):
         ), axis=1)
         return (k1 + 2 * k2 + 2 * k3 + k4) * h / 6
 
+    def append(self):
+        if self.store is not None:
+            self.store.append(key="positionX", value=pd.DataFrame(self.positionX))
+            self.store.append(key="phaseTheta", value=pd.DataFrame(self.phaseTheta))
+            self.store.append(key="pointTheta", value=pd.DataFrame(self.temp))
+
     def update(self):
         self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta)
         self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta)
         self.positionX = np.mod(self.positionX, 10)
-        self.phaseTheta += self.pointTheta
+        self.temp = self.pointTheta
+        self.phaseTheta += self.temp
         self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
+        self.append()
 
     def plot(self) -> None:
         plt.figure(figsize=(6, 5))
@@ -252,11 +266,13 @@ class SpatialGroups(Swarmalators2D):
         cbar.ax.set_ylim(-np.pi, np.pi)
         cbar.ax.set_yticklabels(['$\pi$', '$0$', '$\pi$'])
 
-    def plot_update(self, _):
+    def plot_update(self, i):
         if self.tqdm:
             pbar.update(1)
-        pointTheta = self.pointTheta
+        pointTheta = self.temp
         self.update()
+        if i % self.shotsnaps != 0:
+            return
         clockWise, antiClockWise = np.where(pointTheta > 0), np.where(pointTheta < 0)
         plt.cla()
         line = plt.quiver(
@@ -271,13 +287,18 @@ class SpatialGroups(Swarmalators2D):
         plt.ylim(0, 10)
         return line
 
-    def run_mp4(self, TNum: int):
-        file_name = f"spatial_groups_{self.strengthLambda:2f}_{self.distanceD0:2f}.mp4"
+    def __str__(self) -> str:
+        return f"spatial_groups_{self.strengthLambda:.2f}_{self.distanceD0:.2f}"
 
+    def run_mp4(self, TNum: int):
         if self.tqdm:
             global pbar
             pbar = tqdm(total=TNum)
 
         fig, ax = plt.subplots()
         ani = ma.FuncAnimation(fig, self.plot_update, frames=np.arange(0, TNum, 1), interval=10, repeat=False)
-        ani.save(file_name, dpi=200)
+        ani.save(f"{self}.mp4", dpi=200)
+
+    def close(self):
+        if self.store is not None:
+            self.store.close()
