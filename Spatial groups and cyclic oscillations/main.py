@@ -37,7 +37,11 @@ sns.set(font_scale=1.1, rc={
 
 plt.rcParams['mathtext.fontset'] = 'stix'
 plt.rcParams['font.family'] = 'STIXGeneral'
-plt.rcParams['animation.ffmpeg_path'] = "D:/Programs/ffmpeg/bin/ffmpeg.exe"
+if os.path.exists("/opt/conda/bin/ffmpeg"):
+    plt.rcParams['animation.ffmpeg_path'] = "/opt/conda/bin/ffmpeg"
+else:
+    plt.rcParams['animation.ffmpeg_path'] = "D:/Programs/ffmpeg/bin/ffmpeg.exe"
+
 
 
 def runge_kutta_4(func, y, h):
@@ -199,7 +203,10 @@ class SpatialGroups(Swarmalators2D):
         self.savePath = savePath
         self.temp = np.zeros(agentsNum)
         self.shotsnaps = shotsnaps
-        if savePath is None:
+        self.counts = 0
+
+    def init_store(self):
+        if self.savePath is None:
             self.store = None
         else:
             if os.path.exists(f"{self.savePath}/{self}.h5"):
@@ -229,25 +236,29 @@ class SpatialGroups(Swarmalators2D):
         adjMatrixTheta = np.repeat(phaseTheta, phaseTheta.shape[0]).reshape(phaseTheta.shape[0], phaseTheta.shape[0])
         k1 = omegaTheta + strengthLambda * np.sum(K * np.sin(
             adjMatrixTheta - phaseTheta
-        ), axis=1)
+        ), axis=0)
         k2 = omegaTheta + strengthLambda * np.sum(K * np.sin(
             adjMatrixTheta - (phaseTheta + h / 2 * k1)
-        ), axis=1)
+        ), axis=0)
         k3 = omegaTheta + strengthLambda * np.sum(K * np.sin(
             adjMatrixTheta - (phaseTheta + h / 2 * k2)
-        ), axis=1)
+        ), axis=0)
         k4 = omegaTheta + strengthLambda * np.sum(K * np.sin(
             adjMatrixTheta - (phaseTheta + h * k3)
-        ), axis=1)
+        ), axis=0)
         return (k1 + 2 * k2 + 2 * k3 + k4) * h / 6
 
     def append(self):
         if self.store is not None:
+            if self.counts % self.shotsnaps != 0:
+                return
             self.store.append(key="positionX", value=pd.DataFrame(self.positionX))
             self.store.append(key="phaseTheta", value=pd.DataFrame(self.phaseTheta))
             self.store.append(key="pointTheta", value=pd.DataFrame(self.temp))
 
     def update(self):
+        if self.tqdm:
+            pbar.update(1)
         self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta)
         self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta)
         self.positionX = np.mod(self.positionX, 10)
@@ -255,6 +266,7 @@ class SpatialGroups(Swarmalators2D):
         self.phaseTheta += self.temp
         self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
         self.append()
+        self.counts += 1
 
     def plot(self) -> None:
         plt.figure(figsize=(6, 5))
@@ -267,8 +279,6 @@ class SpatialGroups(Swarmalators2D):
         cbar.ax.set_yticklabels(['$\pi$', '$0$', '$\pi$'])
 
     def plot_update(self, i):
-        if self.tqdm:
-            pbar.update(1)
         pointTheta = self.temp
         self.update()
         if i % self.shotsnaps != 0:
@@ -290,7 +300,16 @@ class SpatialGroups(Swarmalators2D):
     def __str__(self) -> str:
         return f"spatial_groups_{self.strengthLambda:.2f}_{self.distanceD0:.2f}"
 
+    def run(self, TNum: int):
+        self.init_store()
+        if self.tqdm:
+            global pbar
+            pbar = tqdm(total=TNum)
+        for i in np.arange(TNum):
+            self.update()
+
     def run_mp4(self, TNum: int):
+        self.init_store()
         if self.tqdm:
             global pbar
             pbar = tqdm(total=TNum)

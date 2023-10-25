@@ -1,21 +1,50 @@
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+from tqdm.notebook import tqdm
+import pandas as pd
 import numba as nb
 import numpy as np
+import os
 
 new_cmap = mcolors.LinearSegmentedColormap.from_list(
     "new", plt.cm.jet(np.linspace(0, 1, 256)) * 0.85, N=256
 )
+if os.path.exists("/opt/conda/bin/ffmpeg"):
+    plt.rcParams['animation.ffmpeg_path'] = "/opt/conda/bin/ffmpeg"
+else:
+    plt.rcParams['animation.ffmpeg_path'] = "D:/Programs/ffmpeg/bin/ffmpeg.exe"
+
 
 
 class Swarmalators2D():
-    def __init__(self, agentsNum: int, dt: float, K: float, randomSeed: int = 100) -> None:
+    def __init__(self, agentsNum: int, dt: float, K: float, randomSeed: int = 100,
+                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 5) -> None:
         np.random.seed(randomSeed)
         self.positionX = np.random.random((agentsNum, 2)) * 2 - 1
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi
         self.agentsNum = agentsNum
         self.dt = dt
         self.K = K
+        self.tqdm = tqdm
+        self.savePath = savePath
+        self.shotsnaps = shotsnaps
+        self.counts = 0
+
+    def init_store(self):
+        if self.savePath is None:
+            self.store = None
+        else:
+            if os.path.exists(f"{self.savePath}/{self}.h5"):
+                os.remove(f"{self.savePath}/{self}.h5")
+            self.store = pd.HDFStore(f"{self.savePath}/{self}.h5")
+        self.append()
+
+    def append(self):
+        if self.store is not None:
+            if self.counts % self.shotsnaps != 0:
+                return
+            self.store.append(key="positionX", value=pd.DataFrame(self.positionX))
+            self.store.append(key="phaseTheta", value=pd.DataFrame(self.phaseTheta))
 
     @staticmethod
     @nb.njit
@@ -55,7 +84,13 @@ class Swarmalators2D():
 
     @property
     def deltaX(self) -> np.ndarray:
-        """Spatial difference between agents"""
+        """
+        Spatial difference between agents
+
+        Shape: (agentsNum, otherAgentsNum, 2) = (agentsNum, agentsNum - 1, 2)
+
+        Every cell = otherAgent - agentSelf !!!
+        """
         return self._delta_x(self.positionX)
 
     @property
@@ -117,7 +152,6 @@ class Swarmalators2D():
         pointTheta = omega + K * np.sum(H * G, axis=1) / (dim - 1)
         phaseTheta = np.mod(phaseTheta + pointTheta * dt, 2 * np.pi)
         return positionX, phaseTheta
-    
 
     def update(self) -> None:
         self.positionX, self.phaseTheta = self._update(
@@ -128,6 +162,21 @@ class Swarmalators2D():
             self.H, self.G,
             self.K, self.dt
         )
+        self.counts += 1
+
+    def run(self, TNum: int):
+        self.init_store()
+        if self.tqdm:
+            global pbar
+            pbar = tqdm(total=TNum)
+        for i in np.arange(TNum):
+            self.update()
+            self.append()
+            if self.tqdm:
+                pbar.update(1)
+        if self.tqdm:
+            pbar.close()
+        self.close()
 
     def plot(self) -> None:
         plt.figure(figsize=(6, 5))
@@ -138,3 +187,7 @@ class Swarmalators2D():
         cbar = plt.colorbar(ticks=[0, np.pi, 2*np.pi])
         cbar.ax.set_ylim(0, 2*np.pi)
         cbar.ax.set_yticklabels(['$0$', '$\pi$', '$2\pi$'])
+
+    def close(self):
+        if self.store is not None:
+            self.store.close()
