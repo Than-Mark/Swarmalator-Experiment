@@ -29,6 +29,7 @@ class Swarmalators2D():
         self.savePath = savePath
         self.shotsnaps = shotsnaps
         self.counts = 0
+        self.temp = {}
 
     def init_store(self):
         if self.savePath is None:
@@ -76,22 +77,32 @@ class Swarmalators2D():
     @nb.njit
     def distance_x(deltaX):
         return np.sqrt(deltaX[:, :, 0] ** 2 + deltaX[:, :, 1] ** 2)
+    
+    def div_distance_power(self, numerator: np.ndarray, power: float, dim: int = 2):
+        if dim == 2:
+            answer = numerator / self.temp["distanceX2"] ** power
+        else:
+            answer = numerator / self.temp["distanceX"] ** power
+        
+        answer[np.isnan(answer)] = 0
+
+        return answer
 
     @property
     def deltaTheta(self) -> np.ndarray:
         """Phase difference between agents"""
-        return self._delta_theta(self.phaseTheta)
+        return self.phaseTheta - self.phaseTheta[:, np.newaxis]
 
     @property
     def deltaX(self) -> np.ndarray:
         """
         Spatial difference between agents
 
-        Shape: (agentsNum, otherAgentsNum, 2) = (agentsNum, agentsNum - 1, 2)
+        Shape: (agentsNum, agentsNum, 2)
 
         Every cell = otherAgent - agentSelf !!!
         """
-        return self._delta_x(self.positionX)
+        return self.positionX - self.positionX[:, np.newaxis]
 
     @property
     def Fatt(self) -> np.ndarray:
@@ -145,7 +156,7 @@ class Swarmalators2D():
     ):
         dim = positionX.shape[0]
         pointX = velocity + np.sum(
-            Iatt * Fatt.reshape((dim, dim - 1, 1)) - Irep * Frep.reshape((dim, dim - 1, 1)),
+            Iatt * Fatt.reshape((dim, dim, 1)) - Irep * Frep.reshape((dim, dim, 1)),
             axis=1
         ) / (dim - 1)
         positionX += pointX * dt
@@ -153,7 +164,14 @@ class Swarmalators2D():
         phaseTheta = np.mod(phaseTheta + pointTheta * dt, 2 * np.pi)
         return positionX, phaseTheta
 
+    def update_temp(self):
+        self.temp["deltaTheta"] = self.deltaTheta
+        self.temp["deltaX"] = self.deltaX
+        self.temp["distanceX"] = self.distance_x(self.temp["deltaX"])
+        self.temp["distanceX2"] = self.temp["distanceX"].reshape(self.agentsNum, self.agentsNum, 1)
+
     def update(self) -> None:
+        self.update_temp()
         self.positionX, self.phaseTheta = self._update(
             self.positionX, self.phaseTheta,
             self.velocity, self.omega,
