@@ -84,7 +84,7 @@ class Swarmalators2D():
         else:
             answer = numerator / self.temp["distanceX"] ** power
         
-        answer[np.isnan(answer)] = 0
+        answer[np.isnan(answer) | np.isinf(answer)] = 0
 
         return answer
 
@@ -158,9 +158,9 @@ class Swarmalators2D():
         pointX = velocity + np.sum(
             Iatt * Fatt.reshape((dim, dim, 1)) - Irep * Frep.reshape((dim, dim, 1)),
             axis=1
-        ) / (dim - 1)
+        ) / dim
         positionX += pointX * dt
-        pointTheta = omega + K * np.sum(H * G, axis=1) / (dim - 1)
+        pointTheta = omega + K * np.sum(H * G, axis=1) / dim
         phaseTheta = np.mod(phaseTheta + pointTheta * dt, 2 * np.pi)
         return positionX, phaseTheta
 

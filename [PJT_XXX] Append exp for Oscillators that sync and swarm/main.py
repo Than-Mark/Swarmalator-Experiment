@@ -14,9 +14,6 @@ import shutil
 
 randomSeed = 100
 
-# %matplotlib inline
-# %config InlineBackend.figure_format = "svg"
-
 new_cmap = mcolors.LinearSegmentedColormap.from_list(
     "new", plt.cm.jet(np.linspace(0, 1, 256)) * 0.85, N=256
 )
@@ -50,29 +47,21 @@ from swarmalatorlib.template import Swarmalators2D
 import numpy as np
 
 
-class Strogatz2017(Swarmalators2D):
+class Strogatz2017Fix(Swarmalators2D):
     def __init__(self, agentsNum: int, dt: float, 
-                 K: float, J: float, fixSpiralPhaseCoupling: bool = False,
+                 K: float, J: float, 
                  randomSeed: int = 100, tqdm: bool = False, savePath: str = None, shotsnaps: int = 5) -> None:
         super().__init__(agentsNum, dt, K, randomSeed, tqdm, savePath, shotsnaps)
         self.J = J
-        self.fixSpiralPhaseCoupling = fixSpiralPhaseCoupling
         self.one = np.ones((agentsNum, agentsNum))
         self.phaseTheta = np.zeros(agentsNum)
 
     @property
     def Fatt(self) -> np.ndarray:
         """
-        Effect of phase similarity on spatial attraction
-
-        if fixSpiralPhaseCoupling is True, then Fatt = 1 + J
-
-        else Fatt = 1 + J * cos(theta_j - theta_i)
+        Effect of phase similarity on spatial attraction: 1 + J
         """
-        if self.fixSpiralPhaseCoupling:
-            return 1 + self.J * self.one
-        else:
-            return 1 + self.J * np.cos(self.deltaTheta)
+        return 1 + self.J * self.one
     
     @property
     def Frep(self) -> np.ndarray:
@@ -118,31 +107,58 @@ class Strogatz2017(Swarmalators2D):
         return positionX, phaseTheta
     
     def __str__(self) -> str:
-        if self.fixSpiralPhaseCoupling:
-            return f"Strogatz2017_a{self.agentsNum}_K{self.K}_J{self.J:.2f}_fix"
-        else:
-            return f"Strogatz2017_a{self.agentsNum}_K{self.K}_J{self.J:.2f}"
+        return f"Strogatz2017_a{self.agentsNum}_K{self.K}_J{self.J:.2f}_fix"
 
 
-from itertools import product
+class Strogatz2017(Swarmalators2D):
+    def __init__(self, agentsNum: int, dt: float, 
+                 K: float, J: float, 
+                 randomSeed: int = 100, tqdm: bool = False, savePath: str = None, shotsnaps: int = 5) -> None:
+        super().__init__(agentsNum, dt, K, randomSeed, tqdm, savePath, shotsnaps)
+        self.J = J
+        self.one = np.ones((agentsNum, agentsNum))
 
-Jrange = np.concatenate([
-    np.arange(0.01, 0.1, 0.01),
-    np.arange(0.1, 1.1, 0.1),
-    np.arange(1, 11, 1)
-])
-agentsNumRange = np.arange(1000, 5001, 1000)
+    @property
+    def Fatt(self) -> np.ndarray:
+        """
+        Effect of phase similarity on spatial attraction: 1 + J * cos(theta_j - theta_i)
+        """
+        return 1 + self.J * np.cos(self.temp["deltaTheta"])
 
-
-models = [
-    Strogatz2017(agentsNum=agentsNum, dt=0.1, K=1, J=J, 
-                 fixSpiralPhaseCoupling=True, randomSeed=randomSeed, 
-                 tqdm=False, savePath="data", shotsnaps=1)
-    for J, agentsNum in tqdm(product(Jrange, agentsNumRange), total=len(Jrange) * len(agentsNumRange))
-]
-
-def run_model(model):
-    model.run(2000)
-
-with Pool(40) as p:
-    p.map(run_model, models)
+    @property
+    def Frep(self) -> np.ndarray:
+        """Effect of phase similarity on spatial repulsion: 1"""
+        return self.one
+    
+    @property
+    def Iatt(self) -> np.ndarray:
+        """Spatial attraction: (x_j - x_i) / |x_j - x_i|"""
+        return self.div_distance_power(numerator=self.temp["deltaX"], power=1)
+    
+    @property
+    def Irep(self) -> np.ndarray:
+        """Spatial repulsion: (x_j - x_i) / |x_j - x_i| ^ 2"""
+        return self.div_distance_power(numerator=self.temp["deltaX"], power=2)
+    
+    @property
+    def velocity(self) -> np.ndarray:
+        """Self propulsion velocity: 0"""
+        return 0
+    
+    @property
+    def omega(self) -> np.ndarray:
+        """Natural frequency: 0"""
+        return 0
+    
+    @property
+    def H(self) -> np.ndarray:
+        """Phase interaction: sin(theta_j - theta_i)"""
+        return np.sin(self.deltaTheta)
+    
+    @property
+    def G(self) -> np.ndarray:
+        """Effect of spatial similarity on phase couplings: 1 / |x_i - x_j|"""
+        return self.div_distance_power(numerator=self.one, power=1, dim=1)
+    
+    def __str__(self) -> str:
+        return f"Strogatz2017_a{self.agentsNum}_K{self.K}_J{self.J:.2f}"
