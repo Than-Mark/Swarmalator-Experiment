@@ -1,16 +1,21 @@
 import matplotlib.colors as mcolors
 import matplotlib.animation as ma
 import matplotlib.pyplot as plt
-from tqdm.notebook import tqdm
 from itertools import product
 import pandas as pd
 import numpy as np
 import numba as nb
 import imageio
+import sys
 import os
 import shutil
 
-randomSeed = 100
+randomSeed = 10
+
+if "ipykernel_launcher.py" in sys.argv[0]:
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
 
 new_cmap = mcolors.LinearSegmentedColormap.from_list(
     "new", plt.cm.jet(np.linspace(0, 1, 256)) * 0.85, N=256
@@ -42,151 +47,14 @@ if os.path.exists("/opt/conda/bin/ffmpeg"):
 else:
     plt.rcParams['animation.ffmpeg_path'] = "D:/Programs/ffmpeg/bin/ffmpeg.exe"
 
-
-
-def runge_kutta_4(func, y, h):
-    k1 = func(y)
-    k2 = func(y + h / 2 * k1)
-    k3 = func(y + h / 2 * k2)
-    k4 = func(y + h * k3)
-    return y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
-
-class Swarmalators2D():
-    def __init__(self, agentsNum: int, dt: float, K: float) -> None:
-        np.random.seed(randomSeed)
-        self.positionX = np.random.random((agentsNum, 2)) * 2 - 1
-        self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi
-        self.agentsNum = agentsNum
-        self.dt = dt
-        self.K = K
-
-    @staticmethod
-    @nb.njit
-    def _delta_theta(phaseTheta):
-        dim = phaseTheta.shape[0]
-        subTheta = phaseTheta - np.repeat(phaseTheta, dim).reshape(dim, dim)
-
-        deltaTheta = np.zeros((dim, dim - 1))
-        for i in np.arange(dim):
-            deltaTheta[i, :i], deltaTheta[i, i:] = subTheta[i, :i], subTheta[i, i + 1 :]
-        return deltaTheta
-
-    @staticmethod
-    @nb.njit
-    def _delta_x(positionX):
-        dim = positionX.shape[0]
-        subX = positionX - np.repeat(positionX, dim).reshape(dim, 2, dim).transpose(0, 2, 1)
-        deltaX = np.zeros((dim, dim - 1, 2))
-        for i in np.arange(dim):
-            deltaX[i, :i], deltaX[i, i:] = subX[i, :i], subX[i, i + 1 :]
-        return deltaX
-
-    @staticmethod
-    @nb.njit
-    def distance_x_2(deltaX):
-        return np.sqrt(deltaX[:, :, 0] ** 2 + deltaX[:, :, 1] ** 2).reshape(deltaX.shape[0], deltaX.shape[1], 1)
-
-    @staticmethod
-    @nb.njit
-    def distance_x(deltaX):
-        return np.sqrt(deltaX[:, :, 0] ** 2 + deltaX[:, :, 1] ** 2)
-
-    @property
-    def deltaTheta(self) -> np.ndarray:
-        """Phase difference between agents"""
-        return self._delta_theta(self.phaseTheta)
-
-    @property
-    def deltaX(self) -> np.ndarray:
-        """Spatial difference between agents"""
-        return self._delta_x(self.positionX)
-
-    @property
-    def Fatt(self) -> np.ndarray:
-        """Effect of phase similarity on spatial attraction"""
-        pass
-
-    @property
-    def Frep(self) -> np.ndarray:
-        """Effect of phase similarity on spatial repulsion"""
-        pass
-
-    @property
-    def Iatt(self) -> np.ndarray:
-        """Spatial attraction"""
-        pass
-
-    @property
-    def Irep(self) -> np.ndarray:
-        """Spatial repulsion"""
-        pass
-
-    @property
-    def H(self) -> np.ndarray:
-        """Phase interaction"""
-        pass
-
-    @property
-    def G(self) -> np.ndarray:
-        """Effect of spatial similarity on phase couplings"""
-        pass
-
-    @property
-    def velocity(self) -> np.ndarray:
-        """Self propulsion velocity"""
-        pass
-
-    @property
-    def omega(self) -> np.ndarray:
-        """Natural intrinsic frequency"""
-        pass
-
-    @staticmethod
-    @nb.njit
-    def _update(
-        positionX: np.ndarray, phaseTheta: np.ndarray,
-        velocity: np.ndarray, omega: np.ndarray,
-        Iatt: np.ndarray, Irep: np.ndarray,
-        Fatt: np.ndarray, Frep: np.ndarray,
-        H: np.ndarray, G: np.ndarray,
-        K: float, dt: float
-    ):
-        dim = positionX.shape[0]
-        pointX = velocity + np.sum(
-            Iatt * Fatt.reshape((dim, dim - 1, 1)) - Irep * Frep.reshape((dim, dim - 1, 1)),
-            axis=1
-        ) / (dim - 1)
-        positionX += pointX * dt
-        pointTheta = omega + K * np.sum(H * G, axis=1) / (dim - 1)
-        phaseTheta = np.mod(phaseTheta + pointTheta * dt, 2 * np.pi)
-        return positionX, phaseTheta
-    
-
-    def update(self) -> None:
-        self.positionX, self.phaseTheta = self._update(
-            self.positionX, self.phaseTheta,
-            self.velocity, self.omega,
-            self.Iatt, self.Irep,
-            self.Fatt, self.Frep,
-            self.H, self.G,
-            self.K, self.dt
-        )
-
-    def plot(self) -> None:
-        plt.figure(figsize=(6, 5))
-
-        plt.scatter(self.positionX[:, 0], self.positionX[:, 1],
-                    c=self.phaseTheta, cmap=new_cmap, alpha=0.8, vmin=0, vmax=2*np.pi)
-
-        cbar = plt.colorbar(ticks=[0, np.pi, 2*np.pi])
-        cbar.ax.set_ylim(0, 2*np.pi)
-        cbar.ax.set_yticklabels(['$0$', '$\pi$', '$2\pi$'])
+sys.path.append("..")
+from swarmalatorlib.template import Swarmalators2D
 
 
 class SpatialGroups(Swarmalators2D):
-    def __init__(self, strengthLambda: float, distanceD0: float, 
+    def __init__(self, strengthLambda: float, distanceD0: float, omegaTheta2Shift: float = 0,
                  agentsNum: int=1000, dt: float=0.01, tqdm: bool = False, 
-                 savePath: str = None, shotsnaps: int = 5) -> None:
+                 savePath: str = None, shotsnaps: int = 5, uniform: bool = True, randomSeed: int = 10) -> None:
         np.random.seed(randomSeed)
         self.positionX = np.random.random((agentsNum, 2)) * 10
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
@@ -194,16 +62,25 @@ class SpatialGroups(Swarmalators2D):
         self.dt = dt
         self.speedV = 0.03
         self.distanceD0 = distanceD0
-        self.omegaTheta = np.concatenate([
-            np.random.normal(loc=3, scale=0.5, size=agentsNum // 2),
-            np.random.normal(loc=-3, scale=0.5, size=agentsNum // 2)
-        ])
+        if uniform:
+            self.omegaTheta = np.concatenate([
+                np.random.uniform(1, 3, size=agentsNum // 2),
+                np.random.uniform(-3, -1, size=agentsNum // 2)
+            ])
+        else:
+            self.omegaTheta = np.concatenate([
+                np.random.normal(loc=3, scale=0.5, size=agentsNum // 2),
+                np.random.normal(loc=-3, scale=0.5, size=agentsNum // 2)
+            ])
+        self.uniform = uniform
         self.strengthLambda = strengthLambda
         self.tqdm = tqdm
         self.savePath = savePath
         self.temp = np.zeros(agentsNum)
         self.shotsnaps = shotsnaps
         self.counts = 0
+        self.omegaTheta[:self.agentsNum // 2] += omegaTheta2Shift
+        self.omegaTheta2Shift = omegaTheta2Shift
 
     def init_store(self):
         if self.savePath is None:
@@ -216,14 +93,21 @@ class SpatialGroups(Swarmalators2D):
 
     @property
     def K(self):
-        return (self.distance_x(self.deltaX) <= self.distanceD0).astype(float)
+        return self.distance_x(self.deltaX) <= self.distanceD0
 
     @staticmethod
     @nb.njit
     def _delta_x(positionX):
         dim = positionX.shape[0]
-        subX = positionX - np.repeat(positionX, dim).reshape(dim, 2, dim).transpose(0, 2, 1)
-        return subX
+        others = np.repeat(positionX, dim).reshape(dim, 2, dim).transpose(0, 2, 1)
+        subX = positionX - others
+        adjustOthers = (
+            others * (-5 <= subX) * (subX <= 5) + 
+            (others - 10) * (subX < -5) + 
+            (others + 10) * (subX > 5)
+        )
+        adjustSubX = positionX - adjustOthers
+        return adjustSubX
 
     @property
     def pointTheta(self):
@@ -237,16 +121,7 @@ class SpatialGroups(Swarmalators2D):
         k1 = omegaTheta + strengthLambda * np.sum(K * np.sin(
             adjMatrixTheta - phaseTheta
         ), axis=0)
-        k2 = omegaTheta + strengthLambda * np.sum(K * np.sin(
-            adjMatrixTheta - (phaseTheta + h / 2 * k1)
-        ), axis=0)
-        k3 = omegaTheta + strengthLambda * np.sum(K * np.sin(
-            adjMatrixTheta - (phaseTheta + h / 2 * k2)
-        ), axis=0)
-        k4 = omegaTheta + strengthLambda * np.sum(K * np.sin(
-            adjMatrixTheta - (phaseTheta + h * k3)
-        ), axis=0)
-        return (k1 + 2 * k2 + 2 * k3 + k4) * h / 6
+        return k1 * h
 
     def append(self):
         if self.store is not None:
@@ -257,16 +132,12 @@ class SpatialGroups(Swarmalators2D):
             self.store.append(key="pointTheta", value=pd.DataFrame(self.temp))
 
     def update(self):
-        if self.tqdm:
-            pbar.update(1)
         self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta)
         self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta)
         self.positionX = np.mod(self.positionX, 10)
         self.temp = self.pointTheta
         self.phaseTheta += self.temp
         self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
-        self.append()
-        self.counts += 1
 
     def plot(self) -> None:
         plt.figure(figsize=(6, 5))
@@ -298,15 +169,31 @@ class SpatialGroups(Swarmalators2D):
         return line
 
     def __str__(self) -> str:
-        return f"spatial_groups_{self.strengthLambda:.2f}_{self.distanceD0:.2f}"
+        
+        if self.uniform:
+            name =  f"CorrectCoupling_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+        else:
+            name =  f"CorrectCoupling_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+
+        if self.omegaTheta2Shift != 0:
+            name += f"_shift_{self.omegaTheta2Shift:.2f}"
+
+        return name
 
     def run(self, TNum: int):
+        
         self.init_store()
         if self.tqdm:
-            global pbar
-            pbar = tqdm(total=TNum)
-        for i in np.arange(TNum):
+            iterRange = tqdm(range(TNum))
+        else:
+            iterRange = range(TNum)
+
+        for idx in iterRange:
             self.update()
+            self.append()
+            self.counts = idx
+
+        self.close()
 
     def run_mp4(self, TNum: int):
         self.init_store()
@@ -321,3 +208,59 @@ class SpatialGroups(Swarmalators2D):
     def close(self):
         if self.store is not None:
             self.store.close()
+
+    
+class CorrectCouplingAfter(SpatialGroups):
+    def __init__(self, strengthLambda: float, distanceD0: float, omegaTheta2Shift: float = 0,
+                 agentsNum: int=1000, dt: float=0.01, tqdm: bool = False, 
+                 savePath: str = None, shotsnaps: int = 5, uniform: bool = True, randomSeed: int = 100) -> None:
+        super().__init__(strengthLambda, distanceD0, omegaTheta2Shift, agentsNum, dt, tqdm, 
+                         savePath, shotsnaps, uniform, randomSeed)
+
+        targetPath = f"./data/{self.oldName}.h5"
+        totalPositionX = pd.read_hdf(targetPath, key="positionX")
+        totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
+
+        TNum = totalPositionX.shape[0] // self.agentsNum
+        totalPositionX = totalPositionX.values.reshape(TNum, self.agentsNum, 2)
+        totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.agentsNum)
+        
+        self.positionX = totalPositionX[-1]
+        self.phaseTheta = totalPhaseTheta[-1]
+
+    @property
+    def oldName(self) -> str:
+        
+        if self.uniform:
+            name =  f"CorrectCoupling_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+        else:
+            name =  f"CorrectCoupling_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+
+        if self.omegaTheta2Shift != 0:
+            name += f"_shift_{self.omegaTheta2Shift:.2f}"
+
+        return name
+
+    def __str__(self) -> str:
+            
+            if self.uniform:
+                name =  f"CorrectCouplingAfter_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+            else:
+                name =  f"CorrectCouplingAfter_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+    
+            return name
+    
+    def run(self, enhancedLambdas: np.ndarray):
+        TNum = enhancedLambdas.shape[0]
+        self.init_store()
+        if self.tqdm:
+            global pbar
+            pbar = tqdm(total=TNum)
+        for i in np.arange(TNum):
+            if self.tqdm:
+                pbar.update(1)
+            self.strengthLambda = enhancedLambdas[i]
+            self.update()
+            self.append()
+            self.counts += 1
+        self.close()
