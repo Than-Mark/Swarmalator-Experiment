@@ -52,9 +52,10 @@ from swarmalatorlib.template import Swarmalators2D
 
 
 class SpatialGroups(Swarmalators2D):
-    def __init__(self, strengthLambda: float, distanceD0: float, omegaTheta2Shift: float = 0,
-                 agentsNum: int=1000, dt: float=0.01, tqdm: bool = False, 
-                 savePath: str = None, shotsnaps: int = 5, uniform: bool = True, randomSeed: int = 10) -> None:
+    def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 10, 
+                 omegaTheta2Shift: float = 0, agentsNum: int=1000, dt: float=0.01, 
+                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
+                 uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
         np.random.seed(randomSeed)
         self.positionX = np.random.random((agentsNum, 2)) * 10
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
@@ -81,33 +82,29 @@ class SpatialGroups(Swarmalators2D):
         self.counts = 0
         self.omegaTheta[:self.agentsNum // 2] += omegaTheta2Shift
         self.omegaTheta2Shift = omegaTheta2Shift
-
-    def init_store(self):
-        if self.savePath is None:
-            self.store = None
-        else:
-            if os.path.exists(f"{self.savePath}/{self}.h5"):
-                os.remove(f"{self.savePath}/{self}.h5")
-            self.store = pd.HDFStore(f"{self.savePath}/{self}.h5")
-        self.append()
+        self.boundaryLength = boundaryLength
+        self.halfBoundaryLength = boundaryLength / 2
+        self.overWrite = overWrite
 
     @property
     def K(self):
         return self.distance_x(self.deltaX) <= self.distanceD0
 
+    @property
+    def deltaX(self) -> np.ndarray:
+        return self._delta_x(self.positionX, self.positionX[:, np.newaxis], 
+                             self.boundaryLength, self.halfBoundaryLength)
+
     @staticmethod
     @nb.njit
-    def _delta_x(positionX):
-        dim = positionX.shape[0]
-        others = np.repeat(positionX, dim).reshape(dim, 2, dim).transpose(0, 2, 1)
+    def _delta_x(positionX: np.ndarray, others: np.ndarray,
+                 boundaryLength: float, halfBoundaryLength: float) -> np.ndarray:
         subX = positionX - others
-        adjustOthers = (
-            others * (-5 <= subX) * (subX <= 5) + 
-            (others - 10) * (subX < -5) + 
-            (others + 10) * (subX > 5)
+        return positionX - (
+            others * (-halfBoundaryLength <= subX) * (subX <= halfBoundaryLength) + 
+            (others - boundaryLength) * (subX < -halfBoundaryLength) + 
+            (others + boundaryLength) * (subX > halfBoundaryLength)
         )
-        adjustSubX = positionX - adjustOthers
-        return adjustSubX
 
     @property
     def pointTheta(self):
@@ -139,35 +136,6 @@ class SpatialGroups(Swarmalators2D):
         self.phaseTheta += self.temp
         self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
 
-    def plot(self) -> None:
-        plt.figure(figsize=(6, 5))
-
-        plt.scatter(self.positionX[:, 0], self.positionX[:, 1],
-                    c=self.phaseTheta, cmap=new_cmap, alpha=0.8, vmin=-np.pi, vmax=np.pi)
-
-        cbar = plt.colorbar(ticks=[-np.pi, 0, np.pi])
-        cbar.ax.set_ylim(-np.pi, np.pi)
-        cbar.ax.set_yticklabels(['$\pi$', '$0$', '$\pi$'])
-
-    def plot_update(self, i):
-        pointTheta = self.temp
-        self.update()
-        if i % self.shotsnaps != 0:
-            return
-        clockWise, antiClockWise = np.where(pointTheta > 0), np.where(pointTheta < 0)
-        plt.cla()
-        line = plt.quiver(
-            self.positionX[clockWise, 0], self.positionX[clockWise, 1],
-            np.cos(self.phaseTheta[clockWise]), np.sin(self.phaseTheta[clockWise]), color='tomato'
-        )
-        line = plt.quiver(
-            self.positionX[antiClockWise, 0], self.positionX[antiClockWise, 1],
-            np.cos(self.phaseTheta[antiClockWise]), np.sin(self.phaseTheta[antiClockWise]), color='dodgerblue'
-        )
-        plt.xlim(0, 10)
-        plt.ylim(0, 10)
-        return line
-
     def __str__(self) -> str:
         
         if self.uniform:
@@ -180,42 +148,18 @@ class SpatialGroups(Swarmalators2D):
 
         return name
 
-    def run(self, TNum: int):
-        
-        self.init_store()
-        if self.tqdm:
-            iterRange = tqdm(range(TNum))
-        else:
-            iterRange = range(TNum)
-
-        for idx in iterRange:
-            self.update()
-            self.append()
-            self.counts = idx
-
-        self.close()
-
-    def run_mp4(self, TNum: int):
-        self.init_store()
-        if self.tqdm:
-            global pbar
-            pbar = tqdm(total=TNum)
-
-        fig, ax = plt.subplots()
-        ani = ma.FuncAnimation(fig, self.plot_update, frames=np.arange(0, TNum, 1), interval=10, repeat=False)
-        ani.save(f"{self}.mp4", dpi=200)
-
     def close(self):
         if self.store is not None:
             self.store.close()
 
     
 class CorrectCouplingAfter(SpatialGroups):
-    def __init__(self, strengthLambda: float, distanceD0: float, omegaTheta2Shift: float = 0,
-                 agentsNum: int=1000, dt: float=0.01, tqdm: bool = False, 
-                 savePath: str = None, shotsnaps: int = 5, uniform: bool = True, randomSeed: int = 100) -> None:
-        super().__init__(strengthLambda, distanceD0, omegaTheta2Shift, agentsNum, dt, tqdm, 
-                         savePath, shotsnaps, uniform, randomSeed)
+    def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 10,
+                 omegaTheta2Shift: float = 0, agentsNum: int=1000, dt: float=0.01, 
+                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
+                 uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
+        super().__init__(strengthLambda, distanceD0, boundaryLength, omegaTheta2Shift, 
+                         agentsNum, dt, tqdm, savePath, shotsnaps, uniform, randomSeed, overWrite)
 
         targetPath = f"./data/{self.oldName}.h5"
         totalPositionX = pd.read_hdf(targetPath, key="positionX")
@@ -251,16 +195,20 @@ class CorrectCouplingAfter(SpatialGroups):
             return name
     
     def run(self, enhancedLambdas: np.ndarray):
+
+        if not self.init_store():
+            return
+        
         TNum = enhancedLambdas.shape[0]
-        self.init_store()
         if self.tqdm:
-            global pbar
-            pbar = tqdm(total=TNum)
-        for i in np.arange(TNum):
-            if self.tqdm:
-                pbar.update(1)
-            self.strengthLambda = enhancedLambdas[i]
+            iterRange = tqdm(range(TNum))
+        else:
+            iterRange = range(TNum)
+
+        for idx in iterRange:
+            self.strengthLambda = enhancedLambdas[idx]
             self.update()
             self.append()
-            self.counts += 1
+            self.counts = idx
+
         self.close()
