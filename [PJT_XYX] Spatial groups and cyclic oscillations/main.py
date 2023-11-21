@@ -84,6 +84,7 @@ class SpatialGroups(Swarmalators2D):
         self.omegaTheta2Shift = omegaTheta2Shift
         self.boundaryLength = boundaryLength
         self.halfBoundaryLength = boundaryLength / 2
+        self.randomSeed = randomSeed
         self.overWrite = overWrite
 
     @property
@@ -139,9 +140,9 @@ class SpatialGroups(Swarmalators2D):
     def __str__(self) -> str:
         
         if self.uniform:
-            name =  f"CorrectCoupling_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+            name =  f"CorrectCoupling_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
         else:
-            name =  f"CorrectCoupling_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+            name =  f"CorrectCoupling_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
 
         if self.omegaTheta2Shift != 0:
             name += f"_shift_{self.omegaTheta2Shift:.2f}"
@@ -176,9 +177,9 @@ class CorrectCouplingAfter(SpatialGroups):
     def oldName(self) -> str:
         
         if self.uniform:
-            name =  f"CorrectCoupling_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+            name =  f"CorrectCoupling_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
         else:
-            name =  f"CorrectCoupling_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+            name =  f"CorrectCoupling_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
 
         if self.omegaTheta2Shift != 0:
             name += f"_shift_{self.omegaTheta2Shift:.2f}"
@@ -188,9 +189,9 @@ class CorrectCouplingAfter(SpatialGroups):
     def __str__(self) -> str:
             
             if self.uniform:
-                name =  f"CorrectCouplingAfter_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+                name =  f"CorrectCouplingAfter_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
             else:
-                name =  f"CorrectCouplingAfter_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}"
+                name =  f"CorrectCouplingAfter_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
     
             return name
     
