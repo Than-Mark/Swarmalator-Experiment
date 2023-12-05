@@ -58,7 +58,7 @@ class SpatialGroups(Swarmalators2D):
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
                  uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
         np.random.seed(randomSeed)
-        self.positionX = np.random.random((agentsNum, 2)) * boundaryLength
+        self.positionX = np.random.random((agentsNum, 2)) * 10
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
         self.agentsNum = agentsNum
         self.dt = dt
@@ -217,25 +217,22 @@ class CorrectCouplingAfter(SpatialGroups):
 
 
 class SingleDistribution(SpatialGroups):
-    def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 5, 
+    def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 10, 
                  agentsNum: int=500, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
-                 distributType: str = "const", randomSeed: int = 10, overWrite: bool = False) -> None:
-        assert distributType in ["const", "normal", "uniform"], "distributType must be const, normal or uniform"
+                 uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
         np.random.seed(randomSeed)
-        self.positionX = np.random.random((agentsNum, 2)) * boundaryLength
+        self.positionX = np.random.random((agentsNum, 2)) * 10
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
         self.agentsNum = agentsNum
         self.dt = dt
         self.speedV = 0.03
         self.distanceD0 = distanceD0
-        if distributType == "uniform":
+        if uniform:
             self.omegaTheta = np.random.uniform(1, 3, size=agentsNum)
-        elif distributType == "normal":
+        else:
             self.omegaTheta = np.random.normal(loc=3, scale=0.5, size=agentsNum)
-        elif distributType == "const":
-            self.omegaTheta = np.ones(agentsNum) * 3
-        self.distributType = distributType
+        self.uniform = uniform
         self.strengthLambda = strengthLambda
         self.tqdm = tqdm
         self.savePath = savePath
@@ -249,9 +246,11 @@ class SingleDistribution(SpatialGroups):
 
     def __str__(self) -> str:
         
-        
-        name =  f"SingleDistribution_{self.distributType}_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
-        
+        if self.uniform:
+            name =  f"SingleDistribution_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+        else:
+            name =  f"SingleDistribution_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+
         return name
         
 
@@ -275,6 +274,11 @@ class StateAnalysis:
 
         self.centersValue = None
         self.classesValue = None
+
+        if self.tqdm:
+            self.iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
+        else:
+            self.iterObject = range(1, self.totalPhaseTheta.shape[0])
 
     def get_state(self, index: int = -1):
         positionX = self.totalPositionX[index]
@@ -435,34 +439,12 @@ class StateAnalysis:
         ax.scatter(centers[:, 0], centers[:, 1], color=centerColors, s=5)
         ax.set_xlim(0, 10)
         ax.set_ylim(0, 10)    
-
-    def r_order_parameter(self, classOsci: np.ndarray):
-        thetas = self.totalPhaseTheta[:, classOsci]
-        r =(
-            (np.sum(np.sin(thetas), axis=1) / self.model.agentsNum)**2 + 
-            (np.sum(np.cos(thetas), axis=1) / self.model.agentsNum)**2
-        )**0.5
-        return r
-
-    def trapping_ratio_order_paparameter(self, classOsci: np.ndarray, radius: float = 1.5):
-        tr = np.zeros(self.totalPhaseTheta.shape[0])
-        
-        for i in range(self.totalPhaseTheta.shape[0]):
-            center = self.totalPositionX[i, classOsci].mean(axis=0)
-            tr[i] = np.sum(
-                self.adj_distance(center, self.totalPositionX[i, classOsci]) < radius
-            )
-        return tr
     
-    def center_distances_order_paparameter(self, classOsci: np.ndarray):
-        centers = self.centers
-        return self.adj_distance(centers[classOsci], centers[classOsci][:, np.newaxis]).mean(axis=1)
-    
-    def center_radius_order_paparameter(self, classOsci: np.ndarray):
+    def center_radius_op(self, classOsci: np.ndarray):
         centers = self.centers
         return self.adj_distance(centers[classOsci], self.totalPositionX[:, classOsci]).mean(axis=1)
     
-    def time_varying_center_radius_order_paparameter(self, step: int = 10):
+    def tv_center_radius_op(self, step: int = 10):
         centerRadios = []
 
         if self.tqdm:
@@ -481,65 +463,8 @@ class StateAnalysis:
             centerRadios = centerRadios + [d] * step
 
         return np.array(centerRadios)
-
-    def time_varying_class_center_radius(self, step: int = 10):
-        t = []
-        centerRadios = []
-
-        if self.tqdm:
-            iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
-        else:
-            iterObject = range(1, self.totalPhaseTheta.shape[0])
-
-        for i in iterObject:
-            if i % step != 0:
-                continue
-            self.lookIndex = i
-            
-            classes, centers = self.get_classes_centers()
-            
-            for classIdx in classes:
-                classOscis = np.array(classes[classIdx])
-                if len(classOscis) < 5:
-                    continue
-                center = centers[classIdx]
-                distance = self.adj_distance(center, self.totalPositionX[i][classOscis])
-                d = np.mean(distance)
-                centerRadios.append(d)
-                t.append(i)
-
-        return np.array([t, centerRadios]).T
-
-    def time_varying_class_center_position(self, step: int = 10):
-        t = []
-        positionX = []
-        positionY = []
-
-        if self.tqdm:
-            iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
-        else:
-            iterObject = range(1, self.totalPhaseTheta.shape[0])
-
-        for i in iterObject:
-            if i % step != 0:
-                continue
-            self.lookIndex = i
-
-            classes, centers = self.get_classes_centers()
-
-            for classIdx in classes:
-                classOscis = np.array(classes[classIdx])
-                if len(classOscis) < 5:
-                    continue
-                center = centers[classOscis].mean(axis=0)
-
-                positionX.append(center[0])
-                positionY.append(center[1])
-                t.append(i)
-
-        return np.array([t, positionX, positionY]).T
     
-    def time_varying_center_position(self, step: int = 30):
+    def tv_center_position(self, step: int = 30):
         color = ["tomato"] * 500 + ["dodgerblue"] * 500
 
         t = []
@@ -570,7 +495,7 @@ class StateAnalysis:
 
         return np.array([t, positionX, positionY]).T, colors
 
-    def time_varying_center_radius(self, step: int = 30):
+    def tv_center_radius(self, step: int = 30):
         
         color = ["tomato"] * 500 + ["dodgerblue"] * 500
 
@@ -599,48 +524,20 @@ class StateAnalysis:
 
         return np.array([t, centerRadios]).T, colors
     
-    def time_varying_center_distance(self, step: int = 10):
-
-        color = ["tomato"] * 500 + ["dodgerblue"] * 500
-
-        t = []
-        centerDistances = []
-        colors = []
-
-        if self.tqdm:
-            iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
-        else:
-            iterObject = range(1, self.totalPhaseTheta.shape[0])
-
-        for i in iterObject:
-            if i % step != 0:
-                continue
-            self.lookIndex = i
-
-            centers = self.centers
-            t.append(np.ones(self.model.agentsNum) * i)
-            centerDistances.append(self.adj_distance(centers, centers[:, np.newaxis]).mean(axis=1))
-            colors.append(color)
-
-        t = np.concatenate(t, axis=0)
-        centerDistances = np.concatenate(centerDistances, axis=0)
-        colors = np.concatenate(colors, axis=0)
-
-        return np.array([t, centerDistances]).T, colors
-
-    def phase_agg_order_parameter(self):
+    def phase_agg_op(self):
         theta = self.totalPhaseTheta[self.lookIndex]
-        return self._clac_phase_sync_order_parameter(self, theta)
+        return self._clac_phase_sync_op(self, theta)
     
     @staticmethod
     @nb.njit
-    def _clac_phase_sync_order_parameter(theta):
+    def _clac_phase_sync_op(theta):
         N = theta.shape[0]
         return (
             (np.sum(np.sin(theta)) / N) ** 2 + 
             (np.sum(np.cos(theta)) / N) ** 2
         )**0.5
 
+    @staticmethod
     @nb.njit
     def _delta_x(positionX, others, boundaryLength, halfLength):
         subX = positionX - others
@@ -658,7 +555,7 @@ class StateAnalysis:
         )
 
     @property
-    def center_agg_order_parameter1(self):
+    def center_agg1(self):
 
         centers = self.centers
         deltaX = self.delta_x(centers, centers[:, np.newaxis])
@@ -666,14 +563,103 @@ class StateAnalysis:
         return np.sqrt(np.sum(deltaX ** 2, axis=2)).mean(axis=1)
 
     @property
-    def center_agg_order_parameter2(self):
+    def center_agg2(self):
 
         centers = self.centers
         deltaX = self.delta_x(centers, centers[:, np.newaxis])
 
         return np.sqrt(np.sum(deltaX.mean(axis=1) ** 2, axis=-1))
     
-    def time_varying_center_agg_order_parameter(self, opType: int, step: int = 10):
+    @property
+    def dis_reciwgt_phase_agg(self):
+        centers = self.centers
+        deltaX = self.delta_x(centers, centers[:, np.newaxis])
+        distance = np.sqrt(np.sum(deltaX ** 2, axis=-1))
+        centerDisMat = distance.copy()
+        centerDisMat[centerDisMat != 0] = 1 / centerDisMat[centerDisMat != 0]
+        N = centers.shape[0]
+        theta = self.totalPhaseTheta[self.lookIndex]
+        return [
+            (
+                (np.sum(np.sin(theta) * centerDisMat[rowIdx]) / centerDisMat[rowIdx].sum()) ** 2 + 
+                (np.sum(np.cos(theta) * centerDisMat[rowIdx]) / centerDisMat[rowIdx].sum()) ** 2
+            )**0.5
+            for rowIdx in range(N)
+        ]
+
+    def tv_dis_reciwgt_phase_agg(self, step: int = 30):
+        color = ["tomato"] * 500 + ["dodgerblue"] * 500
+
+        t = []
+        opValues = []
+        colors = []
+
+        for i in self.iterObject:
+            if i % step != 0:
+                continue
+            self.lookIndex = i
+
+            opValue = self.dis_reciwgt_phase_agg
+
+            t.append(np.ones(self.model.agentsNum) * i)
+            opValues.append(opValue)
+            colors.append(color)
+
+        t = np.concatenate(t, axis=0)
+        opValues = np.concatenate(opValues, axis=0)
+        colors = np.concatenate(colors, axis=0)
+
+        return np.array([t, opValues]).T, colors
+
+    def tv_dis_reciwgt_phase_agg_op(self, step: int = 10):
+        t = []
+        r = []
+
+        for i in self.iterObject:
+            if i % step != 0:
+                continue
+            self.lookIndex = i
+
+            opValue = self.dis_reciwgt_phase_agg
+
+            r.append(np.mean(opValue))
+            t.append(i)
+
+        return np.array([t, r]).T
+
+    def tv_center_agg(self, opType: int, step: int = 30):
+        color = ["tomato"] * 500 + ["dodgerblue"] * 500
+
+        t = []
+        centerAggs = []
+        colors = []
+
+        if self.tqdm:
+            iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
+        else:
+            iterObject = range(1, self.totalPhaseTheta.shape[0])
+
+        for i in iterObject:
+            if i % step != 0:
+                continue
+            self.lookIndex = i
+
+            if opType == 1:
+                caValue = self.center_agg1
+            elif opType == 2:
+                caValue = self.center_agg2
+
+            t.append(np.ones(self.model.agentsNum) * i)
+            centerAggs.append(caValue)
+            colors.append(color)
+
+        t = np.concatenate(t, axis=0)
+        centerAggs = np.concatenate(centerAggs, axis=0)
+        colors = np.concatenate(colors, axis=0)
+
+        return np.array([t, centerAggs]).T, colors
+    
+    def tv_center_agg_op(self, opType: int, step: int = 10):
         assert opType in [1, 2], "opType must be 1 or 2"
 
         t = []
@@ -690,14 +676,64 @@ class StateAnalysis:
             self.lookIndex = i
 
             if opType == 1:
-                opValue = self.center_agg_order_parameter1
+                caValue = self.center_agg1
             elif opType == 2:
-                opValue = self.center_agg_order_parameter2
+                caValue = self.center_agg2
 
-            r.append(np.mean(opValue))
+            r.append(np.mean(caValue))
             t.append(i)
 
         return np.array([t, r]).T
+
+def plot_drpaop(models: List[SpatialGroups], savePath: str = None):
+    _ = plt.figure(figsize=(3 * 5, len(models) * 5))
+
+    idx = 0
+
+    for model in tqdm(models):
+        ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
+        ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
+
+        sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
+        drpa = sa.tv_dis_reciwgt_phase_agg_op(20)
+        ax1.plot(drpa[:, 0], drpa[:, 1])
+        ax1.set_ylim(0, 1)
+        ax1.set_title(f"{model},     t: 0-12000, Dis ReciWgt Phase Agg")
+
+        sa.plot_centers(ax=ax2, index=-1)
+        ax2.set_title(f"snapshot at 12000")
+
+        idx += 1
+
+    plt.tight_layout()
+    if savePath is not None:
+        plt.savefig(savePath, dpi=100, bbox_inches="tight")
+    plt.close()
+
+def plot_drpa(models: List[SpatialGroups], savePath: str = None):
+    _ = plt.figure(figsize=(3 * 5, len(models) * 5))
+
+    idx = 0
+
+    for model in tqdm(models):
+        ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
+        ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
+
+        sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
+        drpa, colors = sa.tv_dis_reciwgt_phase_agg(30)
+        ax1.scatter(drpa[:, 0], drpa[:, 1], s=0.5, alpha=0.01, c=colors)
+        ax1.set_ylim(0, 1)
+        ax1.set_title(f"{model},     t: 0-12000, Dis ReciWgt Phase Agg")
+
+        sa.plot_centers(ax=ax2, index=-1)
+        ax2.set_title(f"snapshot at 12000")
+
+        idx += 1
+
+    plt.tight_layout()
+    if savePath is not None:
+        plt.savefig(savePath, dpi=100, bbox_inches="tight")
+    plt.close()
 
 def plot_tvcp(models: List[SpatialGroups], savePath: str = None):
     _ = plt.figure(figsize=(3 * 5, len(models) * 5))
@@ -710,7 +746,7 @@ def plot_tvcp(models: List[SpatialGroups], savePath: str = None):
         ax2 = plt.subplot2grid((len(models) * 2, 3), (idx, 2), rowspan=2)
 
         sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
-        cp1, colors = sa.time_varying_center_position(step=30)
+        cp1, colors = sa.tv_center_position(step=30)
         sa.plot_centers(ax=ax2, index=-1)
         ax2.set_title(f"snapshot at 12000")
 
@@ -728,6 +764,32 @@ def plot_tvcp(models: List[SpatialGroups], savePath: str = None):
         plt.savefig(savePath, dpi=100, bbox_inches="tight")
     plt.close()
 
+def plot_tvca(models: List[SpatialGroups], opType: int, savePath: str = None):
+    assert opType in [1, 2], "opType must be 1 or 2"
+    _ = plt.figure(figsize=(3 * 5, len(models) * 5))
+
+    idx = 0
+
+    for model in tqdm(models):
+        ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
+        ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
+
+        sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
+        ca, colors = sa.tv_center_agg(opType, 30)
+        ax1.scatter(ca[:, 0], ca[:, 1], s=0.5, alpha=0.01, c=colors)
+        ax1.set_title(f"{model},     t: 0-12000, Center Agg{opType}")
+
+        sa.plot_centers(ax=ax2, index=-1)
+        ax2.set_title(f"snapshot at 12000")
+
+        idx += 1
+
+    plt.tight_layout()
+    if savePath is not None:
+        plt.savefig(savePath, dpi=100, bbox_inches="tight")
+    plt.close()
+
+
 def plot_tvcaop(models: List[SpatialGroups], opType: int, savePath: str = None):
     assert opType in [1, 2], "opType must be 1 or 2"
     _ = plt.figure(figsize=(3 * 5, len(models) * 5))
@@ -739,9 +801,9 @@ def plot_tvcaop(models: List[SpatialGroups], opType: int, savePath: str = None):
         ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
 
         sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
-        caop = sa.time_varying_center_agg_order_parameter(opType, 20)
+        caop = sa.tv_center_agg_op(opType, 20)
         ax1.plot(caop[:, 0], caop[:, 1])
-        ax1.set_title(f"{model}, t: 0-12000, Center Agg Order Parameter{opType}")
+        ax1.set_title(f"{model},     t: 0-12000, Center Agg Order Parameter{opType}")
 
         sa.plot_centers(ax=ax2, index=-1)
         ax2.set_title(f"snapshot at 12000")
@@ -753,80 +815,79 @@ def plot_tvcaop(models: List[SpatialGroups], opType: int, savePath: str = None):
         plt.savefig(savePath, dpi=100, bbox_inches="tight")
     plt.close()
 
-def plot_tvcr(models: List[SpatialGroups], savePath: str = None):
-    _ = plt.figure(figsize=(3 * 5, len(models) * 5))
+# def plot_tvcr(models: List[SpatialGroups], savePath: str = None):
+#     _ = plt.figure(figsize=(3 * 5, len(models) * 5))
 
-    idx = 0
+#     idx = 0
 
-    for model in tqdm(models):
-        ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
-        ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
+#     for model in tqdm(models):
+#         ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
+#         ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
 
-        sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
-        cr, colors = sa.time_varying_center_radius(30)
-        ax1.scatter(cr[:, 0], cr[:, 1], s=0.5, alpha=0.01, c=colors)
-        ax1.set_title(f"{model}, t: 0-12000, Global center distance")
+#         sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
+#         cr, colors = sa.tv_center_radius(30)
+#         ax1.scatter(cr[:, 0], cr[:, 1], s=0.5, alpha=0.01, c=colors)
+#         ax1.set_title(f"{model},     t: 0-12000, Global center distance")
 
-        sa.plot_centers(ax=ax2, index=-1)
-        ax2.set_title(f"snapshot at 12000")
+#         sa.plot_centers(ax=ax2, index=-1)
+#         ax2.set_title(f"snapshot at 12000")
 
-        idx += 1
+#         idx += 1
 
-    plt.tight_layout()
-    if savePath is not None:
-        plt.savefig(savePath, dpi=100, bbox_inches="tight")
-    plt.close()
+#     plt.tight_layout()
+#     if savePath is not None:
+#         plt.savefig(savePath, dpi=100, bbox_inches="tight")
+#     plt.close()
 
-# def 
 
-def plot_tvccr(models: List[SpatialGroups], savePath: str = None):
-    _ = plt.figure(figsize=(3 * 5, len(models) * 5))
+# def plot_tvccr(models: List[SpatialGroups], savePath: str = None):
+#     _ = plt.figure(figsize=(3 * 5, len(models) * 5))
 
-    idx = 0
+#     idx = 0
 
-    for model in tqdm(models):
-        ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
-        ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
+#     for model in tqdm(models):
+#         ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
+#         ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
 
-        sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
-        tvccr = sa.time_varying_class_center_radius(35)
-        ax1.plot(tvccr[:, 0], tvccr[:, 1])
-        ax1.set_title(f"{model}, t: 0-12000, Class mean center distance")
+#         sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
+#         tvccr = sa.tv_class_center_radius(35)
+#         ax1.plot(tvccr[:, 0], tvccr[:, 1])
+#         ax1.set_title(f"{model}, t: 0-12000, Class mean center distance")
 
-        sa.plot_centers(ax=ax2, index=-1)
-        ax2.set_title(f"snapshot at 12000")
+#         sa.plot_centers(ax=ax2, index=-1)
+#         ax2.set_title(f"snapshot at 12000")
 
-        idx += 1
+#         idx += 1
 
-    plt.tight_layout()
-    if savePath is not None:
-        plt.savefig(savePath, dpi=100, bbox_inches="tight")
-    plt.close()
+#     plt.tight_layout()
+#     if savePath is not None:
+#         plt.savefig(savePath, dpi=100, bbox_inches="tight")
+#     plt.close()
 
-def plot_tvccp(models: List[SpatialGroups], savePath: str = None):
-    _ = plt.figure(figsize=(3 * 5, len(models) * 5))
+# def plot_tvccp(models: List[SpatialGroups], savePath: str = None):
+#     _ = plt.figure(figsize=(3 * 5, len(models) * 5))
 
-    idx = 0
+#     idx = 0
 
-    for model in tqdm(models):
-        ax1Row1 = plt.subplot2grid((len(models) * 2, 3), (idx, 0), colspan=2)
-        ax1Row2 = plt.subplot2grid((len(models) * 2, 3), (idx + 1, 0), colspan=2)
-        ax2 = plt.subplot2grid((len(models) * 2, 3), (idx, 2), rowspan=2)
+#     for model in tqdm(models):
+#         ax1Row1 = plt.subplot2grid((len(models) * 2, 3), (idx, 0), colspan=2)
+#         ax1Row2 = plt.subplot2grid((len(models) * 2, 3), (idx + 1, 0), colspan=2)
+#         ax2 = plt.subplot2grid((len(models) * 2, 3), (idx, 2), rowspan=2)
 
-        sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
-        cp1 = sa.time_varying_class_center_position(step=30)
-        sa.plot_centers(ax=ax2, index=-1)
+#         sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
+#         cp1 = sa.tv_class_center_position(step=30)
+#         sa.plot_centers(ax=ax2, index=-1)
 
-        ax1Row1.scatter(cp1[:, 0], cp1[:, 1], s=0.5, alpha=0.01)
-        ax1Row1.set_ylim(0, 10)
-        ax1Row1.set_title(f"{model}, t: 0-12000, Class center PositionX")
-        ax1Row2.scatter(cp1[:, 0], cp1[:, 2], s=0.5, alpha=0.01)
-        ax1Row2.set_ylim(0, 10)
-        ax1Row2.set_title(f"PositionY")
+#         ax1Row1.scatter(cp1[:, 0], cp1[:, 1], s=0.5, alpha=0.01)
+#         ax1Row1.set_ylim(0, 10)
+#         ax1Row1.set_title(f"{model}, t: 0-12000, Class center PositionX")
+#         ax1Row2.scatter(cp1[:, 0], cp1[:, 2], s=0.5, alpha=0.01)
+#         ax1Row2.set_ylim(0, 10)
+#         ax1Row2.set_title(f"PositionY")
 
-        idx += 2
+#         idx += 2
 
-    plt.tight_layout()
-    if savePath is not None:
-        plt.savefig(savePath, dpi=100, bbox_inches="tight")
-    plt.close()
+#     plt.tight_layout()
+#     if savePath is not None:
+#         plt.savefig(savePath, dpi=100, bbox_inches="tight")
+#     plt.close()
