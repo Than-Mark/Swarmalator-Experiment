@@ -4,6 +4,7 @@ from tqdm.notebook import tqdm
 import pandas as pd
 import numba as nb
 import numpy as np
+import warnings
 import os
 
 new_cmap = mcolors.LinearSegmentedColormap.from_list(
@@ -47,26 +48,26 @@ class Swarmalators2D():
             self.store.append(key="positionX", value=pd.DataFrame(self.positionX))
             self.store.append(key="phaseTheta", value=pd.DataFrame(self.phaseTheta))
 
-    @staticmethod
-    @nb.njit
-    def _delta_theta(phaseTheta):
-        dim = phaseTheta.shape[0]
-        subTheta = phaseTheta - np.repeat(phaseTheta, dim).reshape(dim, dim)
+    # @staticmethod
+    # @nb.njit
+    # def _delta_theta(phaseTheta):
+    #     dim = phaseTheta.shape[0]
+    #     subTheta = phaseTheta - np.repeat(phaseTheta, dim).reshape(dim, dim)
 
-        deltaTheta = np.zeros((dim, dim - 1))
-        for i in np.arange(dim):
-            deltaTheta[i, :i], deltaTheta[i, i:] = subTheta[i, :i], subTheta[i, i + 1 :]
-        return deltaTheta
+    #     deltaTheta = np.zeros((dim, dim - 1))
+    #     for i in np.arange(dim):
+    #         deltaTheta[i, :i], deltaTheta[i, i:] = subTheta[i, :i], subTheta[i, i + 1 :]
+    #     return deltaTheta
 
-    @staticmethod
-    @nb.njit
-    def _delta_x(positionX):
-        dim = positionX.shape[0]
-        subX = positionX - np.repeat(positionX, dim).reshape(dim, 2, dim).transpose(0, 2, 1)
-        deltaX = np.zeros((dim, dim - 1, 2))
-        for i in np.arange(dim):
-            deltaX[i, :i], deltaX[i, i:] = subX[i, :i], subX[i, i + 1 :]
-        return deltaX
+    # @staticmethod
+    # @nb.njit
+    # def _delta_x(positionX):
+    #     dim = positionX.shape[0]
+    #     subX = positionX - np.repeat(positionX, dim).reshape(dim, 2, dim).transpose(0, 2, 1)
+    #     deltaX = np.zeros((dim, dim - 1, 2))
+    #     for i in np.arange(dim):
+    #         deltaX[i, :i], deltaX[i, i:] = subX[i, :i], subX[i, i + 1 :]
+    #     return deltaX
 
     @staticmethod
     @nb.njit
@@ -79,11 +80,13 @@ class Swarmalators2D():
         return np.sqrt(deltaX[:, :, 0] ** 2 + deltaX[:, :, 1] ** 2)
     
     def div_distance_power(self, numerator: np.ndarray, power: float, dim: int = 2):
-        if dim == 2:
-            answer = numerator / self.temp["distanceX2"] ** power
-        else:
-            answer = numerator / self.temp["distanceX"] ** power
-        
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if dim == 2:
+                answer = numerator / self.temp["distanceX2"] ** power
+            else:
+                answer = numerator / self.temp["distanceX"] ** power
+            
         answer[np.isnan(answer) | np.isinf(answer)] = 0
 
         return answer

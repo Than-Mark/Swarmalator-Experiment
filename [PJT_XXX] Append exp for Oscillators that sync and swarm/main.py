@@ -102,7 +102,7 @@ class Strogatz2017Fix(Swarmalators2D):
         pointX = velocity + np.sum(
             Iatt * Fatt.reshape((dim, dim, 1)) - Irep * Frep.reshape((dim, dim, 1)),
             axis=1
-        ) / (dim - 1)
+        ) / dim
         positionX += pointX * dt
         return positionX, phaseTheta
     
