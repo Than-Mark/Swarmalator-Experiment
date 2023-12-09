@@ -58,7 +58,7 @@ class SpatialGroups(Swarmalators2D):
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
                  uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
         np.random.seed(randomSeed)
-        self.positionX = np.random.random((agentsNum, 2)) * 10
+        self.positionX = np.random.random((agentsNum, 2)) * self.boundaryLength
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
         self.agentsNum = agentsNum
         self.dt = dt
@@ -133,7 +133,7 @@ class SpatialGroups(Swarmalators2D):
     def update(self):
         self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta)
         self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta)
-        self.positionX = np.mod(self.positionX, 10)
+        self.positionX = np.mod(self.positionX, self.boundaryLength)
         self.temp = self.pointTheta
         self.phaseTheta += self.temp
         self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
@@ -217,22 +217,25 @@ class CorrectCouplingAfter(SpatialGroups):
 
 
 class SingleDistribution(SpatialGroups):
-    def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 10, 
+    def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 5, 
                  agentsNum: int=500, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
-                 uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
+                 distributType: str = "const", randomSeed: int = 10, overWrite: bool = False) -> None:
+        assert distributType in ["const", "normal", "uniform"], "distributType must be const, normal or uniform"
         np.random.seed(randomSeed)
-        self.positionX = np.random.random((agentsNum, 2)) * 10
+        self.positionX = np.random.random((agentsNum, 2)) * boundaryLength
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
         self.agentsNum = agentsNum
         self.dt = dt
         self.speedV = 0.03
         self.distanceD0 = distanceD0
-        if uniform:
+        if distributType == "uniform":
             self.omegaTheta = np.random.uniform(1, 3, size=agentsNum)
-        else:
+        elif distributType == "normal":
             self.omegaTheta = np.random.normal(loc=3, scale=0.5, size=agentsNum)
-        self.uniform = uniform
+        elif distributType == "const":
+            self.omegaTheta = np.ones(agentsNum) * 3
+        self.distributType = distributType
         self.strengthLambda = strengthLambda
         self.tqdm = tqdm
         self.savePath = savePath
@@ -246,11 +249,9 @@ class SingleDistribution(SpatialGroups):
 
     def __str__(self) -> str:
         
-        if self.uniform:
-            name =  f"SingleDistribution_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
-        else:
-            name =  f"SingleDistribution_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
-
+        
+        name =  f"SingleDistribution_{self.distributType}_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+        
         return name
         
 
