@@ -221,6 +221,7 @@ class SingleDistribution(SpatialGroups):
                  agentsNum: int=500, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
                  distributType: str = "const", randomSeed: int = 10, overWrite: bool = False) -> None:
+        
         assert distributType in ["const", "normal", "uniform"], "distributType must be const, normal or uniform"
         np.random.seed(randomSeed)
         self.positionX = np.random.random((agentsNum, 2)) * boundaryLength
