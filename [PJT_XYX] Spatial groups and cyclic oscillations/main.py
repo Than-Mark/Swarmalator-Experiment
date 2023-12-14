@@ -58,7 +58,7 @@ class SpatialGroups(Swarmalators2D):
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
                  uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
         np.random.seed(randomSeed)
-        self.positionX = np.random.random((agentsNum, 2)) * self.boundaryLength
+        self.positionX = np.random.random((agentsNum, 2)) * boundaryLength
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
         self.agentsNum = agentsNum
         self.dt = dt
@@ -515,9 +515,11 @@ class StateAnalysis:
                 continue
             self.lookIndex = i
 
-            centers = self.centers
+            centers = self.centersNoMod
             t.append(np.ones(self.model.agentsNum) * i)
-            centerRadios.append(self.adj_distance(self.totalPositionX[i], centers))
+            centerRadios.append(
+                np.sqrt(np.sum((centers - self.totalPositionX[i])**2, axis=-1))
+            )  # self.adj_distance(self.totalPositionX[i], centers)
             colors.append(color)
 
         t = np.concatenate(t, axis=0)
@@ -817,29 +819,29 @@ def plot_tvcaop(models: List[SpatialGroups], opType: int, savePath: str = None):
         plt.savefig(savePath, dpi=100, bbox_inches="tight")
     plt.close()
 
-# def plot_tvcr(models: List[SpatialGroups], savePath: str = None):
-#     _ = plt.figure(figsize=(3 * 5, len(models) * 5))
+def plot_tvcr(models: List[SpatialGroups], savePath: str = None):
+    _ = plt.figure(figsize=(3 * 5, len(models) * 5))
 
-#     idx = 0
+    idx = 0
 
-#     for model in tqdm(models):
-#         ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
-#         ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
+    for model in tqdm(models):
+        ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
+        ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
 
-#         sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
-#         cr, colors = sa.tv_center_radius(30)
-#         ax1.scatter(cr[:, 0], cr[:, 1], s=0.5, alpha=0.01, c=colors)
-#         ax1.set_title(f"{model},     t: 0-12000, Global center distance")
+        sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
+        cr, colors = sa.tv_center_radius(30)
+        ax1.scatter(cr[:, 0], cr[:, 1], s=0.5, alpha=0.01, c=colors)
+        ax1.set_title(f"{model},     t: 0-12000, Global center distance")
 
-#         sa.plot_centers(ax=ax2, index=-1)
-#         ax2.set_title(f"snapshot at 12000")
+        sa.plot_centers(ax=ax2, index=-1)
+        ax2.set_title(f"snapshot at 12000")
 
-#         idx += 1
+        idx += 1
 
-#     plt.tight_layout()
-#     if savePath is not None:
-#         plt.savefig(savePath, dpi=100, bbox_inches="tight")
-#     plt.close()
+    plt.tight_layout()
+    if savePath is not None:
+        plt.savefig(savePath, dpi=100, bbox_inches="tight")
+    plt.close()
 
 
 # def plot_tvccr(models: List[SpatialGroups], savePath: str = None):
